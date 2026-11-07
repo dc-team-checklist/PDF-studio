@@ -156,6 +156,15 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
 .xt td{border:1px solid var(--border);padding:4px 7px;min-width:60px;vertical-align:top;white-space:pre-wrap}
 .xt td:focus{outline:2px solid var(--focus);background:var(--accent-soft)}
 .xt tr:nth-child(even) td{background:var(--panel2)}
+.prgrid{display:grid;grid-template-columns:290px 1fr;gap:18px;align-items:start}
+.prset{display:flex;flex-direction:column;gap:10px}
+.prset .field{min-width:0}.prset select,.prset input[type=text]{width:100%}
+.chk{font-size:13px;display:flex;gap:6px;align-items:center;color:var(--text)!important;font-weight:400!important}
+.prright{background:var(--canvas);border-radius:10px;padding:12px;min-height:320px;max-height:62vh;overflow:auto}
+.prprev{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;align-items:flex-end}
+.prsheet{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.prsheet canvas{background:#fff;box-shadow:var(--shadow)}
+@media (max-width:760px){.prgrid{grid-template-columns:1fr}}
 .formfield{display:grid;grid-template-columns:220px 1fr;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
 .formfield label{overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13px}
 @media (max-width:760px){
@@ -266,6 +275,14 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
     </div>
     <div class="pgrid" id="oGrid"></div>
   </div>
+</section>
+
+<!-- PRINT -->
+<section class="tool" id="t-print">
+  <h1>Print</h1>
+  <p class="sub">Print with full control: page ranges, odd/even pages, paper size, scaling, several pages per sheet, margins, black &amp; white — with a live preview.</p>
+  <div class="actions" style="margin:0 0 14px"><button class="btn primary" id="prOpenCur" style="display:none"></button></div>
+  <div class="drop" data-drop="print"><div class="big">🖨</div><b>Drop a PDF here to print it</b><p>or click to browse · shortcut: Ctrl+P</p></div>
 </section>
 
 <!-- MERGE -->
@@ -528,6 +545,37 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
   </div>
 </div>
 
+<!-- print dialog -->
+<div class="modal-bg" id="prModal">
+  <div class="modal" style="max-width:1020px">
+    <h2>🖨 Print <span class="muted" id="prName" style="font-weight:400;font-size:14px"></span></h2>
+    <div class="prgrid">
+      <div class="prset">
+        <div class="field"><label>Pages</label><select id="prPages"><option value="all">All pages</option><option value="current">Current page</option><option value="custom">Custom range…</option></select>
+          <input type="text" id="prRange" placeholder="e.g. 1-3, 5, 8-" style="display:none"></div>
+        <div class="field"><label>Print</label><select id="prSubset"><option value="all">All pages in range</option><option value="odd">Odd pages only</option><option value="even">Even pages only</option></select>
+          <label class="chk"><input type="checkbox" id="prReverse"> Reverse order</label></div>
+        <div class="field"><label>Paper size</label><select id="prPaper"><option value="auto">Same as document</option><option value="a4">A4 (210 × 297 mm)</option><option value="letter">Letter (8.5 × 11 in)</option><option value="legal">Legal (8.5 × 14 in)</option><option value="a3">A3 (297 × 420 mm)</option><option value="a5">A5 (148 × 210 mm)</option><option value="tabloid">Tabloid (11 × 17 in)</option></select></div>
+        <div class="field"><label>Orientation</label><select id="prOri"><option value="auto">Automatic</option><option value="p">Portrait</option><option value="l">Landscape</option></select></div>
+        <div class="field"><label>Scale</label><select id="prScale"><option value="fit">Fit to paper</option><option value="shrink">Shrink oversized pages</option><option value="actual">Actual size (100%)</option><option value="custom">Custom…</option></select>
+          <div id="prPctRow" style="display:none" class="row"><input type="number" id="prPct" value="100" min="10" max="400" style="width:80px"> %</div></div>
+        <div class="field"><label>Pages per sheet</label><select id="prNup"><option>1</option><option>2</option><option>4</option><option>6</option><option>9</option><option>16</option></select>
+          <label class="chk" id="prBorderRow" style="display:none"><input type="checkbox" id="prBorder" checked> Border around each page</label></div>
+        <div class="field"><label>Margins</label><select id="prMargin"><option value="0">None</option><option value="6">Narrow (6 mm)</option><option value="12">Normal (12 mm)</option><option value="25">Wide (25 mm)</option></select></div>
+        <div class="field"><label>Color</label><select id="prColor"><option value="color">Color</option><option value="gray">Black &amp; white (grayscale)</option></select></div>
+        <label class="chk"><input type="checkbox" id="prAutoRot" checked> Auto-rotate pages to fit the paper</label>
+        <label class="chk"><input type="checkbox" id="prAnn" checked> Include my edits, form fields &amp; comments</label>
+      </div>
+      <div class="prright">
+        <div class="hint" id="prInfo">Preparing preview…</div>
+        <div id="prPreview" class="prprev"></div>
+      </div>
+    </div>
+    <p class="hint" style="margin-bottom:0">Printer, number of copies and two-sided printing are chosen in the next window. For exact sizes pick the same paper size there and keep its scale at 100% / “Actual size”.</p>
+    <div class="actions"><button class="btn primary" id="prGo">🖨 Print…</button><button class="btn" id="prSave">⬇ Save as print-ready PDF</button><div style="flex:1"></div><button class="btn" id="prCancel">Cancel</button></div>
+  </div>
+</div>
+
 <!-- shortcut modal -->
 <div class="modal-bg" id="scModal">
   <div class="modal">
@@ -730,6 +778,7 @@ const TOOLS = [
   ['view', '👁', 'View & Edit', 'Read, annotate, add text, highlight, draw, white-out, images, sign', 'Edit'],
   ['organize', '🗂', 'Organize pages', 'Reorder, rotate, delete, duplicate, insert pages', 'Edit'],
   ['forms', '📝', 'Fill forms', 'Fill interactive form fields and flatten', 'Edit'],
+  ['print', '🖨', 'Print', 'Page ranges, paper size, scaling, pages per sheet, B&W, preview', 'Edit'],
   ['merge', '➕', 'Merge', 'Combine PDFs and images into one file', 'Combine & split'],
   ['split', '✂️', 'Split / Extract', 'Extract pages or split into multiple files', 'Combine & split'],
   ['compress', '🗜', 'Compress', 'Reduce file size', 'Optimize'],
@@ -756,6 +805,7 @@ function go(id) {
   $$('nav button').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
   $('#main').scrollTop = 0;
   try { localStorage.setItem('pdfstudio.tool', id); } catch (e) { }
+  if (id === 'print') { const b = $('#prOpenCur'); b.style.display = V.pdf ? '' : 'none'; b.textContent = V.pdf ? '🖨 Print the open document: ' + V.name : ''; }
   if (id === 'view' && V.pdf) requestAnimationFrame(() => { if (V.zoomMode) applyZoom(V.zoomMode); });
 }
 window.go = go;
@@ -1149,15 +1199,6 @@ async function buildAnnotated() {
   return doc.save();
 }
 $('#vSave').onclick = () => { if (!V.pdf) return toast('Open a PDF first.', true); guarded(async () => { const out = await buildAnnotated(); download(out, baseName(V.name) + (V.annots.some(l => l.length) ? '-edited' : '') + '.pdf'); V.dirty = false; toast('Saved to your Downloads folder.'); }, 'Saving…'); };
-$('#vPrint').onclick = () => {
-  if (!V.pdf) return toast('Open a PDF first.', true);
-  guarded(async () => {
-    const out = await buildAnnotated(); const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
-    const fr = el('iframe', { style: 'position:fixed;width:1px;height:1px;opacity:0;border:0', src: url });
-    document.body.append(fr);
-    fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(url); } setTimeout(() => fr.remove(), 60000 * 10); };
-  }, 'Preparing print…');
-};
 async function openViewerPicker() { const [f] = await pickFiles('.pdf,application/pdf'); if (f) guarded(() => openInViewer(f), 'Opening…'); }
 $('#vOpen').onclick = openViewerPicker;
 makeDrop($('#vDrop'), '.pdf,application/pdf', false, f => guarded(() => openInViewer(f[0]), 'Opening…'));
@@ -1232,6 +1273,7 @@ document.addEventListener('keydown', e => {
   const viewOn = $('#t-view').classList.contains('show');
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === 'Escape') { $$('.modal-bg').forEach(m => m.classList.remove('show')); }
+  if (mod && e.key.toLowerCase() === 'p') { e.preventDefault(); showPrint(); return; }
   if (!viewOn) return;
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); $('#vSave').click(); return; }
   if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); openViewerPicker(); return; }
@@ -1583,6 +1625,7 @@ function getOcr() {
       errorHandler: e => console.warn('OCR', e),
     })]);
     for (const id of ['lib-tess', 'lib-tess-core', 'lib-tess-worker', 'lib-tess-eng']) document.getElementById(id).textContent = '';
+    await w.setParameters({ tessedit_pageseg_mode: '4' }); // column-aware: best for tables & forms
     return w;
   })().catch(e => { ocrWorkerP = null; throw e; });
   return ocrWorkerP;
@@ -1629,7 +1672,11 @@ function preprocess(c) {
   const atH = (i, j) => j * W + i, atV = (i, j) => i * W + j;
   const minH = Math.max(60, runStats(W, H, atH) * 4, W * 0.04), minV = Math.max(50, runStats(H, W, atV) * 2.5);
   const killH = new Uint8Array(W * H), killV = new Uint8Array(W * H), GAP = 2, seps = [];
-  const scan = (len, n, at, minLen, kill, vert) => { for (let j = 0; j < n; j++) { let s = -1, last = -1; for (let i = 0; i <= len; i++) { const d = i < len && bin[at(i, j)]; if (d) { if (s < 0) s = i; last = i; } else if (s >= 0 && i - last > GAP) { if (last - s + 1 >= minLen) { for (let q = s; q <= last; q++) kill[at(q, j)] = 1; if (vert) seps.push({ x: j, y0: s, y1: last }); } s = -1; } } } };
+  // a real gridline is thin along (almost) its whole length; joined bold letters / text tops are not
+  const MT = Math.max(7, Math.round(Math.max(W, H) / 300));
+  const thinAt = (x, y, horiz) => { let n = 1; if (horiz) { for (let d = 1; d <= MT && y - d >= 0 && bin[(y - d) * W + x]; d++) n++; for (let d = 1; d <= MT && y + d < H && bin[(y + d) * W + x]; d++) n++; } else { for (let d = 1; d <= MT && x - d >= 0 && bin[y * W + x - d]; d++) n++; for (let d = 1; d <= MT && x + d < W && bin[y * W + x + d]; d++) n++; } return n <= MT; };
+  const isLine = (s, e, j, vert) => { let t = 0, c = 0; for (let q = s; q <= e; q += 2) { c++; if (vert ? thinAt(j, q, false) : thinAt(q, j, true)) t++; } return t >= 0.8 * c; };
+  const scan = (len, n, at, minLen, kill, vert) => { for (let j = 0; j < n; j++) { let s = -1, last = -1; for (let i = 0; i <= len; i++) { const d = i < len && bin[at(i, j)]; if (d) { if (s < 0) s = i; last = i; } else if (s >= 0 && (i === len || i - last > GAP)) { if (last - s + 1 >= minLen && isLine(s, last, j, vert)) { for (let q = s; q <= last; q++) kill[at(q, j)] = 1; if (vert) seps.push({ x: j, y0: s, y1: last }); } s = -1; } } } };
   scan(W, H, atH, minH, killH, false); scan(H, W, atV, minV, killV, true);
   // widen erased lines perpendicular to their direction so anti-aliased edges leave no specks
   const kill = new Uint8Array(W * H);
@@ -1645,7 +1692,8 @@ async function ocrCanvas(canvas, label) {
   ocrProgress = m => { if (m.status === 'recognizing text') $('#busyText').textContent = `${label} — recognizing text ${Math.round(m.progress * 100)}%`; };
   const { data } = await w.recognize(canvas, {}, { blocks: true, text: true, hocr: false, tsv: false });
   ocrProgress = null;
-  return (data.words || []).map(x => ({ ...x, text: x.text.replace(/^[|\[\]{}¦]+|[|\[\]{}¦]+$/g, '').trim() }))
+  const CW = canvas.width;
+  return (data.words || []).filter(x => !((x.bbox.x0 <= 2 || x.bbox.x1 >= CW - 3) && x.text.trim().length <= 2)).map(x => ({ ...x, text: x.text.replace(/^[|\[\]{}¦]+|[|\[\]{}¦]+$/g, '').trim() }))
     .filter(x => x.text && !/^[|!_\-—=~'".,:;]+$/.test(x.text) && (x.confidence > 35 || /[A-Za-z0-9]{2}/.test(x.text)))
     .map(x => ({ text: x.text, x0: x.bbox.x0, x1: x.bbox.x1, y0: x.bbox.y0, y1: x.bbox.y1, h: x.bbox.y1 - x.bbox.y0 }))
     .concat(seps.length ? [{ seps }] : []);
@@ -1969,6 +2017,152 @@ $('#txDl').onclick = () => download($('#txOut').value, baseName(S.text.name) + '
 /* ================= wire "go" buttons ================= */
 const GO = { split: goSplit, unlock: goUnlock, pdf2img: goPdf2img, watermark: goWatermark, pagenum: goPagenum, crop: goCrop, meta: goMeta };
 $$('[data-go]').forEach(b => b.onclick = () => guarded(GO[b.dataset.go], 'Working…'));
+
+/* ================= PRINT ================= */
+const PAPER = { a4: [595.28, 841.89], letter: [612, 792], legal: [612, 1008], a3: [841.89, 1190.55], a5: [419.53, 595.28], tabloid: [792, 1224] };
+const GRIDS = { 1: [[1, 1]], 2: [[2, 1], [1, 2]], 4: [[2, 2]], 6: [[3, 2], [2, 3]], 9: [[3, 3]], 16: [[4, 4]] };
+const PR_FIELDS = ['prPages', 'prRange', 'prSubset', 'prReverse', 'prPaper', 'prOri', 'prScale', 'prPct', 'prNup', 'prBorder', 'prMargin', 'prColor', 'prAutoRot', 'prAnn'];
+(function prInit() {
+  let saved = null; try { saved = JSON.parse(localStorage.getItem('pdfstudio.print') || 'null'); } catch (e) { }
+  if (saved) PR_FIELDS.forEach(id => { if (id in saved && id !== 'prPages' && id !== 'prRange') { const e = $('#' + id); e.type === 'checkbox' ? (e.checked = saved[id]) : (e.value = saved[id]); } });
+  else $('#prPaper').value = /^en-(US|CA)|^es-(MX|US)/i.test(navigator.language || '') ? 'letter' : 'a4';
+})();
+function prSettings() {
+  const v = id => $('#' + id); const st = {};
+  PR_FIELDS.forEach(id => { const e = v(id); st[id] = e.type === 'checkbox' ? e.checked : e.value; });
+  try { localStorage.setItem('pdfstudio.print', JSON.stringify(st)); } catch (e) { }
+  return { pages: st.prPages, range: st.prRange, subset: st.prSubset, reverse: st.prReverse, paper: st.prPaper, ori: st.prOri, scale: st.prScale,
+    pct: Math.max(10, Math.min(400, +st.prPct || 100)), nup: +st.prNup, border: st.prBorder, margin: (+st.prMargin) * MM, gray: st.prColor === 'gray', autorot: st.prAutoRot, ann: st.prAnn };
+}
+let prCache = null;
+async function prSource(st) {
+  const key = V.name + '|' + V.vps.length + '|' + st.ann + '|' + (st.ann ? JSON.stringify(V.annots) : '');
+  if (prCache && prCache.key === key) return prCache;
+  const bytes = st.ann ? await buildAnnotated() : V.bytes;
+  const lib = await openPdfLib(bytes); let formFailed = false;
+  if (st.ann) { try { const f = lib.getForm(); if (f.getFields().length) { try { f.updateFieldAppearances(await lib.embedFont(PDFLib.StandardFonts.Helvetica)); } catch (e) { } f.flatten(); } } catch (e) { formFailed = true; console.warn('flatten', e); } }
+  const js = await openPdfJs(bytes, V.name); const raster = new Set();
+  if (st.ann) for (let i = 0; i < js.numPages; i++) {
+    const anns = await (await js.getPage(i + 1)).getAnnotations();
+    // pdf-lib can't flatten comments/stamps/markup from other apps: print those pages as high-res images so nothing is lost
+    if (anns.some(a => a.subtype !== 'Link' && (a.subtype !== 'Widget' || formFailed))) raster.add(i);
+  }
+  if (prCache && prCache.js) prCache.js.destroy();
+  return (prCache = { key, lib, js, raster });
+}
+function prOrder(st, n) {
+  let idx = st.pages === 'current' ? [currentPage()] : st.pages === 'custom' ? parseRange(st.range, n) : [...Array(n).keys()];
+  if (st.subset === 'odd') idx = idx.filter(i => i % 2 === 0); else if (st.subset === 'even') idx = idx.filter(i => i % 2 === 1);
+  if (st.reverse) idx.reverse();
+  if (!idx.length) throw new Error('No pages match these settings (e.g. there are no even pages).');
+  return idx;
+}
+function pageDims(p) { const b = p.getCropBox(), r = ((p.getRotation().angle % 360) + 360) % 360; return { box: b, rot: r, dw: r % 180 ? b.height : b.width, dh: r % 180 ? b.width : b.height }; }
+function cellsFor(SW, SH, cols, rows, st) {
+  const m = st.margin, g = st.nup > 1 ? 4 * MM : 0; const cw = (SW - 2 * m - (cols - 1) * g) / cols, ch = (SH - 2 * m - (rows - 1) * g) / rows; const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push({ x: m + c * (cw + g), y: SH - m - (r + 1) * ch - r * g, w: cw, h: ch });
+  return cells;
+}
+function fitIn(cell, dw, dh, st) {
+  let rot = 0; if (st.autorot && Math.abs(dw - dh) > 1 && (cell.w > cell.h) !== (dw > dh)) { rot = 90; [dw, dh] = [dh, dw]; }
+  const fit = Math.min(cell.w / dw, cell.h / dh);
+  const s = st.scale === 'fit' ? fit : st.scale === 'shrink' ? Math.min(1, fit) : st.scale === 'actual' ? 1 : st.pct / 100;
+  return { s, rot, W: dw * s, H: dh * s, fit };
+}
+function prLayout(st, first) {
+  // choose sheet size, orientation and grid that make pages largest
+  const base = st.paper === 'auto' ? [first.dw, first.dh] : PAPER[st.paper];
+  const sizes = [], P = [Math.min(...base), Math.max(...base)], L = [P[1], P[0]];
+  if (st.ori === 'p') sizes.push(P); else if (st.ori === 'l') sizes.push(L); else if (st.paper === 'auto' && st.nup === 1) sizes.push(base); else sizes.push(P, L);
+  let best = null;
+  for (const [SW, SH] of sizes) for (const [cols, rows] of GRIDS[st.nup]) {
+    const cell = cellsFor(SW, SH, cols, rows, st)[0]; if (cell.w <= 5 || cell.h <= 5) continue;
+    const f = fitIn(cell, first.dw, first.dh, st); const score = Math.min(f.fit, 50) - (f.rot ? 0.001 : 0) + (SH >= SW ? 0.0001 : 0);
+    if (!best || score > best.score) best = { SW, SH, cols, rows, score };
+  }
+  if (!best) throw new Error('The margins are too large for this paper size.');
+  return best;
+}
+async function buildPrint(st, maxSheets = Infinity) {
+  const { degrees, pushGraphicsState, popGraphicsState, rectangle, clip, endPath } = PDFLib;
+  const src = await prSource(st); const n = src.lib.getPageCount(); const idx = prOrder(st, n);
+  const out = await PDFLib.PDFDocument.create(); out.setTitle(baseName(V.name)); out.setProducer('PDF Studio');
+  const items = idx.map(i => ({ i, page: src.lib.getPage(i), ...pageDims(src.lib.getPage(i)) }));
+  const sheets = Math.ceil(items.length / st.nup);
+  const lay = prLayout(st, items[0]);
+  for (let sh = 0; sh < Math.min(sheets, maxSheets); sh++) {
+    const chunk = items.slice(sh * st.nup, (sh + 1) * st.nup);
+    let SW = lay.SW, SH = lay.SH, cols = lay.cols, rows = lay.rows;
+    if (st.paper === 'auto' && st.nup === 1) { const d = chunk[0]; [SW, SH] = [d.dw, d.dh]; if ((st.ori === 'p' && SW > SH) || (st.ori === 'l' && SH > SW)) [SW, SH] = [SH, SW]; }
+    const sheet = out.addPage([SW, SH]); const cells = cellsFor(SW, SH, cols, rows, st);
+    for (let k = 0; k < chunk.length; k++) {
+      const it = chunk[k], cell = cells[k]; const f = fitIn(cell, it.dw, it.dh, st);
+      const L = cell.x + (cell.w - f.W) / 2, B = cell.y + (cell.h - f.H) / 2;
+      sheet.pushOperators(pushGraphicsState(), rectangle(cell.x, cell.y, cell.w, cell.h), clip(), endPath());
+      const useRaster = st.gray || src.raster.has(it.i);
+      let obj, w0, h0, th;
+      if (useRaster) {
+        const px = Math.min(3200 / Math.max(it.dw, it.dh), f.s * (st.nup > 1 ? 220 : 300) / 72);
+        const c = await renderPageToCanvas(src.js, it.i + 1, Math.max(0.5, px)); if (st.gray) grayCanvas(c);
+        obj = await out.embedJpg(await blobBytes(await canvasToBlob(c, 'image/jpeg', 0.92))); c.width = c.height = 0;
+        w0 = it.dw; h0 = it.dh; th = f.rot;
+      } else {
+        const b = it.box; obj = await out.embedPage(it.page, { left: b.x, bottom: b.y, right: b.x + b.width, top: b.y + b.height });
+        w0 = b.width; h0 = b.height; th = ((360 - it.rot + f.rot) % 360 + 360) % 360;
+      }
+      const s = f.s; let x = L, y = B;
+      if (th === 90) x = L + h0 * s; else if (th === 180) { x = L + w0 * s; y = B + h0 * s; } else if (th === 270) y = B + w0 * s;
+      if (useRaster) sheet.drawImage(obj, { x, y, width: w0 * s, height: h0 * s, rotate: degrees(th) });
+      else sheet.drawPage(obj, { x, y, xScale: s, yScale: s, rotate: degrees(th) });
+      sheet.pushOperators(popGraphicsState());
+      if (st.nup > 1 && st.border) sheet.drawRectangle({ x: L, y: B, width: f.W, height: f.H, borderColor: PDFLib.rgb(0.55, 0.55, 0.55), borderWidth: 0.6 });
+      if ((sh * st.nup + k) % 4 === 3) await tick();
+    }
+  }
+  return { bytes: await out.save(), sheets, pages: items.length, raster: st.gray ? items.length : items.filter(x => src.raster.has(x.i)).length };
+}
+let prTimer = null, prToken = 0;
+function prSchedule() { clearTimeout(prTimer); prTimer = setTimeout(prPreview, 300); }
+async function prPreview() {
+  const tok = ++prToken; const box = $('#prPreview'); $('#prInfo').textContent = 'Updating preview…';
+  try {
+    const st = prSettings(); const r = await buildPrint(st, 8); if (tok !== prToken) return;
+    const pdf = await openPdfJs(r.bytes); const frag = document.createDocumentFragment();
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pg = await pdf.getPage(i); const vp = pg.getViewport({ scale: 1 }); const sc = Math.min(200 / vp.width, 230 / vp.height);
+      const c = await renderPageToCanvas(pdf, i, sc * Math.min(2, window.devicePixelRatio || 1)); c.style.width = vp.width * sc + 'px'; c.style.height = vp.height * sc + 'px';
+      frag.append(el('div', { class: 'prsheet' }, c, el('span', {}, `Sheet ${i}`)));
+      if (tok !== prToken) { pdf.destroy(); return; }
+    }
+    pdf.destroy(); box.innerHTML = ''; box.append(frag);
+    const paperName = st.paper === 'auto' ? 'paper matching the document' : $('#prPaper').selectedOptions[0].text.split(' (')[0];
+    $('#prInfo').innerHTML = `<b>${r.pages}</b> page${r.pages > 1 ? 's' : ''} on <b>${r.sheets}</b> sheet${r.sheets > 1 ? 's' : ''} of ${paperName}` + (r.sheets > 8 ? ` · preview shows the first 8` : '') + (r.raster && !st.gray ? ` · ${r.raster} page(s) with comments/stamps printed as high-resolution images` : '');
+  } catch (e) { if (tok === prToken) { $('#prInfo').innerHTML = `<span class="warn">${escHtml(errMsg(e))}</span>`; box.innerHTML = ''; } }
+}
+function prUi() {
+  $('#prRange').style.display = $('#prPages').value === 'custom' ? '' : 'none';
+  $('#prPctRow').style.display = $('#prScale').value === 'custom' ? '' : 'none';
+  $('#prBorderRow').style.display = $('#prNup').value !== '1' ? '' : 'none';
+}
+PR_FIELDS.forEach(id => { const e = $('#' + id); e.addEventListener(e.type === 'text' || e.type === 'number' ? 'input' : 'change', () => { prUi(); prSchedule(); }); });
+function showPrint() {
+  if (!V.pdf) { go('print'); return; }
+  $('#prName').textContent = '— ' + V.name; prUi(); $('#prModal').classList.add('show'); $('#prPreview').innerHTML = ''; prPreview();
+}
+window.showPrint = showPrint;
+function printBytes(bytes) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  $$('iframe.prframe').forEach(f => f.remove());
+  const fr = el('iframe', { class: 'prframe', style: 'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0', src: url });
+  fr.onload = () => setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(url, '_blank'); toast('Use the Print button in the new tab.'); } }, 400);
+  document.body.append(fr);
+}
+$('#prGo').onclick = () => guarded(async () => { const st = prSettings(); const r = await buildPrint(st); $('#prModal').classList.remove('show'); printBytes(r.bytes); }, 'Preparing pages for printing…');
+$('#prSave').onclick = () => guarded(async () => { const r = await buildPrint(prSettings()); download(r.bytes, baseName(V.name) + '-print.pdf'); toast('Print-ready PDF saved.'); }, 'Preparing pages…');
+$('#prCancel').onclick = () => $('#prModal').classList.remove('show');
+$('#vPrint').onclick = () => { if (!V.pdf) return toast('Open a PDF first.', true); showPrint(); };
+makeDrop($('[data-drop="print"]'), '.pdf,application/pdf', false, f => guarded(async () => { await openInViewer(f[0]); showPrint(); }, 'Opening…'));
+$('#prOpenCur').onclick = () => { go('view'); showPrint(); };
 
 /* ================= theme / about / init ================= */
 function setTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; try { localStorage.setItem('pdfstudio.theme', t || ''); } catch (e) { } }
