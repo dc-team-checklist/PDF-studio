@@ -8,6 +8,7 @@
 <script>
 if (/^https?:$/.test(location.protocol)) {
   const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.webmanifest'; document.head.appendChild(l);
+  for (const [rel, href, sz] of [['icon', 'icon-32.png', '32x32'], ['icon', 'icon-192.png', '192x192'], ['apple-touch-icon', 'icon-192.png', '192x192']]) { const k = document.createElement('link'); k.rel = rel; k.href = href; k.sizes = sz; document.head.appendChild(k); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
 }
 </script>
