@@ -123,6 +123,9 @@ svg.ann path{pointer-events:stroke;fill:none;stroke-linecap:round;stroke-linejoi
 svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb)}
 .overlay.t-select .ann{cursor:move}
 .ann img{width:100%;height:100%;display:block;pointer-events:none}
+.ann-cover{pointer-events:auto}
+.overlay.t-edit{cursor:text}
+.edit-hover{position:absolute;outline:2px dashed var(--focus);background:rgba(37,99,235,.08);pointer-events:none;border-radius:2px}
 .handle-r{position:absolute;width:12px;height:12px;right:-7px;bottom:-7px;background:var(--focus);border:2px solid #fff;border-radius:50%;cursor:nwse-resize}
 .vside{width:300px;flex:none;border-left:1px solid var(--border);background:var(--panel);overflow:auto;padding:12px;display:none}
 .vside.show{display:block}
@@ -217,6 +220,7 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
     <span class="sep"></span>
     <span id="vtools">
       <button class="btn sm on" data-tool="select" title="Select / move (V)">↖ Select</button>
+      <button class="btn sm" data-tool="edit" title="Edit existing text in the PDF (E)">✏️ Edit text</button>
       <button class="btn sm" data-tool="text" title="Add text (T)">T Text</button>
       <button class="btn sm" data-tool="draw" title="Freehand draw (D)">✎ Draw</button>
       <button class="btn sm" data-tool="highlight" title="Highlight area (H)">▮ Highlight</button>
@@ -229,6 +233,8 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
     <input type="color" id="vColor" value="#d11a2a" title="Color">
     <select id="vSize" title="Font size / line width"></select>
     <select id="vFont" title="Font"><option value="Helvetica">Sans</option><option value="Times">Serif</option><option value="Courier">Mono</option></select>
+    <button class="btn sm" id="vBold" title="Bold" style="font-weight:800;min-width:30px">B</button>
+    <button class="btn sm" id="vItalic" title="Italic" style="font-style:italic;font-family:Georgia,serif;min-width:30px">I</button>
     <button class="btn sm" id="vDel" title="Delete selected (Del)">🗑</button>
     <button class="btn sm" id="vUndo" title="Undo (Ctrl+Z)">↶</button>
     <button class="btn sm" id="vRedo" title="Redo (Ctrl+Y)">↷</button>
@@ -536,7 +542,8 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
   <div class="modal">
     <h2>PDF Studio — help</h2>
     <p><b>Private &amp; offline.</b> This app is a single file that runs inside your web browser. Your files never leave your computer and no installation or administrator rights are needed.</p>
-    <p><b>View &amp; Edit shortcuts:</b> V select · T text · D draw · H highlight · R box · W white-out · Del delete · Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Ctrl+F search · Ctrl+O open · Ctrl +/− zoom. Double-click a text box to edit it. Select an item and change color/size to restyle it.</p>
+    <p><b>Edit existing text:</b> choose ✏️ Edit text (E), click any line of text, type your changes, click outside. Delete all of it to remove text. The original font size, color and style are matched; on save the original words are covered and your text is written in their place (closest standard font).</p>
+    <p><b>View &amp; Edit shortcuts:</b> V select · E edit text · T text · D draw · H highlight · R box · W white-out · Del delete · Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Ctrl+F search · Ctrl+O open · Ctrl +/− zoom. Double-click a text box to edit it. Select an item and change color/size to restyle it.</p>
     <p><b>Saving:</b> every tool downloads a <i>new</i> file — your original is never changed. Your browser's download settings decide where it goes (usually the Downloads folder). To choose a location each time, enable “Ask where to save each file” in your browser settings.</p>
     <p><b>White-out</b> covers content visually. For confidential data, follow with Compress → Strong so the hidden text is truly removed.</p>
     <p><b>Text</b> supports Latin characters (English and Western European languages).</p>
@@ -830,7 +837,7 @@ function initSingle(tool, onLoaded) {
 function need(tool) { if (!S[tool]) throw new Error('Please choose a PDF first.'); return S[tool]; }
 
 /* ================= VIEW & EDIT ================= */
-const V = { pdf: null, bytes: null, name: '', scale: 1.25, zoomMode: '1.25', vps: [], els: [], annots: [], tool: 'select', sel: null, undo: [], redo: [], pending: null, textIdx: null, rendered: new Map(), dirty: false };
+const V = { pdf: null, bytes: null, name: '', scale: 1.25, zoomMode: '1.25', vps: [], els: [], annots: [], tool: 'select', sel: null, undo: [], redo: [], pending: null, textIdx: null, rendered: new Map(), dirty: false, segs: [], hover: null, bold: false, italic: false };
 let annId = 1;
 const SIZES = [1, 2, 3, 4, 6, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
 SIZES.forEach(s => $('#vSize').append(el('option', { value: s }, s)));
@@ -841,7 +848,7 @@ async function openInViewer(file, bytes) {
   bytes = bytes || await readFile(file);
   const pdf = await openPdfJs(bytes, file.name);
   if (V.pdf) V.pdf.destroy();
-  Object.assign(V, { pdf, bytes, name: file.name, annots: [], sel: null, undo: [], redo: [], textIdx: null, dirty: false, vps: [] });
+  Object.assign(V, { pdf, bytes, name: file.name, annots: [], sel: null, undo: [], redo: [], textIdx: null, dirty: false, vps: [], segs: [], hover: null });
   for (let i = 1; i <= pdf.numPages; i++) {
     const p = await pdf.getPage(i); V.vps.push(p.getViewport({ scale: 1 }));
     V.annots.push([]);
@@ -865,6 +872,8 @@ function buildPages() {
     const wrap = el('div', { class: 'pagewrap', 'data-i': i }, canvas, overlay, el('span', { class: 'plabel' }, 'Page ' + (i + 1)));
     box.append(wrap); V.els.push({ wrap, canvas, overlay });
     overlay.addEventListener('pointerdown', e => onPointerDown(e, i));
+    overlay.addEventListener('pointermove', e => onEditHover(e, i));
+    overlay.addEventListener('pointerleave', () => { if (V.hover && V.hover.page === i) { V.hover = null; renderAnnots(i); } });
     overlay.addEventListener('dblclick', e => { const a = e.target.closest('.ann-text'); if (a) startEditText(a, i); });
     io.observe(wrap);
   });
@@ -926,7 +935,7 @@ function annEl(a, i) {
   const pos = (x, y, w, h) => `left:${x * s}px;top:${y * s}px;width:${w * s}px;height:${h * s}px;`;
   switch (a.type) {
     case 'text':
-      e = el('div', { class: 'ann ann-text', style: `left:${a.x * s}px;top:${a.y * s}px;font-size:${a.size * s}px;color:${a.color};font-family:${FONT_CSS[a.font]}` });
+      e = el('div', { class: 'ann ann-text', style: `left:${a.x * s}px;top:${a.y * s}px;font-size:${a.size * s}px;color:${a.color};font-family:${FONT_CSS[a.font]};font-weight:${a.bold ? 700 : 400};font-style:${a.italic ? 'italic' : 'normal'}` });
       e.textContent = a.text; break;
     case 'highlight': e = el('div', { class: 'ann', style: pos(a.x, a.y, a.w, a.h) + `background:${a.color};opacity:.4;mix-blend-mode:multiply` }); break;
     case 'rect': e = el('div', { class: 'ann', style: pos(a.x, a.y, a.w, a.h) + `border:${a.size * s}px solid ${a.color}` }); break;
@@ -950,32 +959,40 @@ function annEl(a, i) {
 }
 function renderAnnots(i) {
   const o = V.els[i] && V.els[i].overlay; if (!o) return;
-  o.innerHTML = ''; for (const a of V.annots[i]) o.append(annEl(a, i));
+  o.innerHTML = ''; const s = V.scale;
+  for (const a of V.annots[i]) {
+    if (a.cover) { const c = a.cover; o.append(el('div', { class: 'ann ann-cover', 'data-id': a.id, title: 'Edited text (original hidden)', style: `left:${c.x * s}px;top:${c.y * s}px;width:${c.w * s}px;height:${c.h * s}px;background:${c.bg}` })); }
+    o.append(annEl(a, i));
+  }
+  if (V.hover && V.hover.page === i) { const h = V.hover.seg; o.append(el('div', { class: 'edit-hover', style: `left:${(h.x - 2) * s}px;top:${(h.top - 1) * s}px;width:${(h.w + 4) * s}px;height:${(h.bot - h.top + 2) * s}px` })); }
 }
 function findAnn(id) { for (let i = 0; i < V.annots.length; i++) { const a = V.annots[i].find(x => x.id === id); if (a) return [a, i]; } return [null, -1]; }
 function snapshot() { V.undo.push(JSON.stringify(V.annots)); if (V.undo.length > 100) V.undo.shift(); V.redo = []; V.dirty = true; }
 function restore(json) { V.annots = JSON.parse(json); V.sel = null; V.annots.forEach((_, i) => renderAnnots(i)); }
 function undo() { if (!V.undo.length) return; V.redo.push(JSON.stringify(V.annots)); restore(V.undo.pop()); }
 function redo() { if (!V.redo.length) return; V.undo.push(JSON.stringify(V.annots)); restore(V.redo.pop()); }
-function select(a, i) { const prev = V.sel; V.sel = a ? { id: a.id, page: i } : null; if (prev) renderAnnots(prev.page); if (a) { renderAnnots(i); if (a.color) $('#vColor').value = a.color; if (a.size && a.type !== 'highlight' && a.type !== 'whiteout') { if (![...$('#vSize').options].some(o => +o.value === a.size)) $('#vSize').append(el('option', { value: a.size }, a.size)); $('#vSize').value = a.size; } if (a.font) $('#vFont').value = a.font; } }
+function select(a, i) { const prev = V.sel; V.sel = a ? { id: a.id, page: i } : null; if (prev) renderAnnots(prev.page); if (a) { renderAnnots(i); if (a.color) $('#vColor').value = a.color; if (a.size && a.type !== 'highlight' && a.type !== 'whiteout') { if (![...$('#vSize').options].some(o => +o.value === a.size)) $('#vSize').append(el('option', { value: a.size }, a.size)); $('#vSize').value = a.size; } if (a.font) $('#vFont').value = a.font; if (a.type === 'text') { V.bold = !!a.bold; V.italic = !!a.italic; syncBI(); } } }
 function deleteSel() { if (!V.sel) return; const [a, i] = findAnn(V.sel.id); if (!a) return; snapshot(); V.annots[i] = V.annots[i].filter(x => x !== a); V.sel = null; renderAnnots(i); }
 function setTool(t) {
+  if (V.hover) { const hp = V.hover.page; V.hover = null; renderAnnots(hp); }
+  if (t === 'edit' && V.tool !== 'edit' && V.pdf) toast('Click any text in the PDF to edit it. Delete all of it to remove the text.', false, 5000);
   V.tool = t; if (t !== 'image') V.pending = null;
   $$('#vtools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   V.els.forEach(({ overlay }) => overlay.className = 'overlay t-' + t);
 }
 function ptIn(e, i) { const r = V.els[i].overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) / V.scale, y: (e.clientY - r.top) / V.scale }; }
-function startEditText(node, i) {
+function startEditText(node, i, caretAt, beforeState) {
   const [a] = findAnn(+node.dataset.id); if (!a) return;
-  select(a, i); node = V.els[i].overlay.querySelector(`[data-id="${a.id}"]`);
-  const before = JSON.stringify(V.annots);
+  select(a, i); node = V.els[i].overlay.querySelector(`.ann-text[data-id="${a.id}"]`);
+  const before = beforeState || JSON.stringify(V.annots);
   node.contentEditable = 'true'; node.focus({ preventScroll: true });
-  const range = document.createRange(); range.selectNodeContents(node); range.collapse(false);
+  let range = caretAt && document.caretRangeFromPoint ? document.caretRangeFromPoint(caretAt[0], caretAt[1]) : null;
+  if (!range || !node.contains(range.startContainer)) { range = document.createRange(); range.selectNodeContents(node); range.collapse(false); }
   const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
   node.oninput = () => { a.text = node.innerText.replace(/\n$/, ''); };
   node.onblur = () => {
     node.contentEditable = 'false'; a.text = node.innerText.replace(/\n$/, '');
-    if (!a.text.trim()) { V.annots[i] = V.annots[i].filter(x => x !== a); if (V.sel && V.sel.id === a.id) V.sel = null; }
+    if ((!a.text.trim() && !a.cover) || (a.segKey && a.text === a.origText && !a.restyled)) { V.annots[i] = V.annots[i].filter(x => x !== a); if (V.sel && V.sel.id === a.id) V.sel = null; }
     if (JSON.stringify(V.annots) !== before) { V.undo.push(before); V.redo = []; V.dirty = true; }
     renderAnnots(i);
   };
@@ -987,6 +1004,13 @@ function onPointerDown(e, i) {
   if (t.isContentEditable) return;
   const color = $('#vColor').value, size = +$('#vSize').value, font = $('#vFont').value;
   let drag = null;
+  if (V.tool === 'edit') {
+    e.preventDefault();
+    if (annNode) { const [a] = findAnn(+annNode.dataset.id); if (a && a.type === 'text') { startEditText(V.els[i].overlay.querySelector(`.ann-text[data-id="${a.id}"]`), i, [e.clientX, e.clientY]); return; } }
+    const cx = e.clientX, cy = e.clientY;
+    pageSegs(i).then(segs => { const seg = segAt(segs, p); if (seg) beginEditSeg(i, seg, cx, cy); else toast('No editable text here. Use the T Text tool to add new text.'); });
+    return;
+  }
   if (V.tool === 'select' || (annNode && V.tool !== 'draw' && V.tool !== 'text' && !V.pending)) {
     if (!annNode) { select(null); return; }
     const [a] = findAnn(+annNode.dataset.id); select(a, i);
@@ -1000,15 +1024,15 @@ function onPointerDown(e, i) {
       } else if (a.type === 'ink') a.points = orig.points.map(([x, y]) => [x + dx, y + dy]);
       else { a.x = orig.x + dx; a.y = orig.y + dy; }
       renderAnnots(i);
-      if (done && (dx || dy)) { V.undo.push(before); V.redo = []; V.dirty = true; }
+      if (done && (dx || dy)) { V.undo.push(before); V.redo = []; V.dirty = true; a.restyled = true; }
     };
   } else if (V.tool === 'text') {
     if (annNode && annNode.classList.contains('ann-text')) { e.preventDefault(); startEditText(annNode, i); return; }
     e.preventDefault();
     snapshot(); V.undo.pop();
-    const a = { id: annId++, type: 'text', x: p.x, y: p.y - size * 0.6, size, color, font, text: '' };
+    const a = { id: annId++, type: 'text', x: p.x, y: p.y - size * 0.6, size, color, font, bold: V.bold, italic: V.italic, text: '' };
     V.annots[i].push(a); renderAnnots(i);
-    startEditText(V.els[i].overlay.querySelector(`[data-id="${a.id}"]`), i);
+    startEditText(V.els[i].overlay.querySelector(`.ann-text[data-id="${a.id}"]`), i);
     return;
   } else if (V.tool === 'draw') {
     snapshot();
@@ -1041,13 +1065,95 @@ function restyleSel(prop, val) {
   if (!V.sel) return; const [a, i] = findAnn(V.sel.id); if (!a) return;
   if (prop === 'size' && (a.type === 'highlight' || a.type === 'whiteout' || a.type === 'image')) return;
   if (prop === 'color' && (a.type === 'whiteout' || a.type === 'image')) return;
-  if (prop === 'font' && a.type !== 'text') return;
-  snapshot();
+  if ((prop === 'font' || prop === 'bold' || prop === 'italic') && a.type !== 'text') return;
+  snapshot(); a.restyled = true;
   if (prop === 'size') a.size = a.type === 'ink' ? Math.max(0.5, val > 12 ? val / 4 : val / 2) : a.type === 'rect' ? Math.max(0.5, val / 6) : val;
   else a[prop] = val;
   renderAnnots(i);
 }
 $('#vColor').addEventListener('input', e => restyleSel('color', e.target.value));
+function syncBI() { $('#vBold').classList.toggle('on', !!V.bold); $('#vItalic').classList.toggle('on', !!V.italic); }
+$('#vBold').onclick = () => { const [a] = V.sel ? findAnn(V.sel.id) : [null]; V.bold = a && a.type === 'text' ? !a.bold : !V.bold; restyleSel('bold', V.bold); syncBI(); };
+$('#vItalic').onclick = () => { const [a] = V.sel ? findAnn(V.sel.id) : [null]; V.italic = a && a.type === 'text' ? !a.italic : !V.italic; restyleSel('italic', V.italic); syncBI(); };
+/* ---- edit existing PDF text ---- */
+async function pageSegs(i) {
+  if (V.segs[i]) return V.segs[i];
+  const page = await V.pdf.getPage(i + 1); const vp = V.vps[i]; const tc = await page.getTextContent(); const segs = [];
+  for (const it of tc.items) {
+    if (!it.str) continue;
+    const m = pdfjsLib.Util.transform(vp.transform, it.transform);
+    if (Math.abs(m[1]) > 1e-3 || Math.abs(m[2]) > 1e-3 || m[0] <= 0) continue; // only horizontal text
+    const fs = Math.abs(m[3]); if (fs < 2) continue;
+    const st = tc.styles[it.fontName] || {}; const asc = st.ascent > 0.5 && st.ascent < 1.3 ? st.ascent : 0.9, desc = st.descent < 0 && st.descent > -0.5 ? -st.descent : 0.22;
+    const x = m[4], base = m[5], w = it.width * vp.scale;
+    const last = segs[segs.length - 1];
+    if (last && Math.abs(last.base - base) < 0.2 * fs && Math.abs(last.fs - fs) < 0.15 * fs && last.font === it.fontName && x - (last.x + last.w) < 0.4 * fs && x >= last.x + last.w - 0.5 * fs) {
+      const gap = x - (last.x + last.w); if (gap > 0.15 * fs && !/\s$/.test(last.text) && !/^\s/.test(it.str)) last.text += ' ';
+      last.text += it.str; last.w = Math.max(last.w, x + w - last.x); last.top = Math.min(last.top, base - asc * fs); last.bot = Math.max(last.bot, base + desc * fs);
+    } else if (it.str.trim()) segs.push({ text: it.str, x, base, w, fs, font: it.fontName, top: base - asc * fs, bot: base + desc * fs, family: st.fontFamily });
+  }
+  segs.forEach((g, k) => { g.text = g.text.replace(/\s+$/, ''); g.key = i + ':' + k; g.page = page; });
+  return (V.segs[i] = segs);
+}
+const segAt = (segs, p) => segs.find(g => p.x >= g.x - 2 && p.x <= g.x + g.w + 2 && p.y >= g.top - 1 && p.y <= g.bot + 1);
+function fontStyleOf(fontName, family, page) {
+  let name = '', bold = false, italic = false;
+  try { if (page.commonObjs.has(fontName)) { const f = page.commonObjs.get(fontName); name = f.name || ''; bold = !!(f.bold || f.black); italic = !!f.italic; } } catch (e) { }
+  name = name.replace(/^[A-Z]{6}\+/, '');
+  if (/bold|black|heavy|semibold|demi/i.test(name)) bold = true;
+  if (/italic|oblique/i.test(name)) italic = true;
+  const font = /courier|mono|consol|menlo/i.test(name) || family === 'monospace' ? 'Courier' : /times|serif|georgia|garamond|cambria|book|minion|palatino/i.test(name) && !/sans/i.test(name) || family === 'serif' ? 'Times' : 'Helvetica';
+  return { font, bold, italic };
+}
+async function sampleColors(i, box, fs) {
+  // render just this line at high resolution, then: background = colour around the edge, text = the solid core of the letters
+  const k = Math.min(10, Math.max(3, 60 / fs)); const W = Math.max(2, Math.ceil(box.w * k)), H = Math.max(2, Math.ceil(box.h * k));
+  const c = el('canvas', { width: W, height: H }); const g = c.getContext('2d', { willReadFrequently: true });
+  const hex = (r, gg, bb) => '#' + [r, gg, bb].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  try {
+    const page = await V.pdf.getPage(i + 1); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    await page.render({ canvasContext: g, viewport: page.getViewport({ scale: k, offsetX: -box.x * k, offsetY: -box.y * k }) }).promise;
+  } catch (e) { return { fg: '#000000', bg: '#ffffff' }; }
+  const d = g.getImageData(0, 0, W, H).data; const edge = [];
+  for (let x = 0; x < W; x++) edge.push(x * 4, ((H - 1) * W + x) * 4); for (let y = 0; y < H; y++) edge.push(y * W * 4, (y * W + W - 1) * 4);
+  const med = j => edge.map(o => d[o + j]).sort((a, b) => a - b)[edge.length >> 1]; const bg = [med(0), med(1), med(2)];
+  const dist = o => Math.abs(d[o] - bg[0]) + Math.abs(d[o + 1] - bg[1]) + Math.abs(d[o + 2] - bg[2]);
+  let max = 0; for (let o = 0; o < d.length; o += 4) max = Math.max(max, dist(o));
+  if (max < 30) return { fg: '#000000', bg: hex(...bg) };
+  const acc = [0, 0, 0]; let n = 0; for (let o = 0; o < d.length; o += 4) if (dist(o) >= 0.85 * max) { acc[0] += d[o]; acc[1] += d[o + 1]; acc[2] += d[o + 2]; n++; }
+  c.width = c.height = 0;
+  return { fg: hex(acc[0] / n, acc[1] / n, acc[2] / n), bg: hex(...bg) };
+}
+function beginEditSeg(i, seg, cx, cy) {
+  const done = V.annots[i].find(a => a.segKey === seg.key);
+  if (done) { startEditText(V.els[i].overlay.querySelector(`.ann-text[data-id="${done.id}"]`), i, [cx, cy]); return; }
+  const cover = { x: seg.x - 1, y: seg.top - 0.5, w: seg.w + 2, h: seg.bot - seg.top + 1 };
+  const fg = '#000000', bg = '#ffffff'; const fst = fontStyleOf(seg.font, seg.family, seg.page);
+  const size = Math.round(seg.fs * 10) / 10;
+  const before = JSON.stringify(V.annots);
+  const a = { id: annId++, type: 'text', segKey: seg.key, x: seg.x, y: seg.base - 0.93 * size, size, color: fg, ...fst, text: seg.text, origText: seg.text, cover: { ...cover, bg } };
+  V.annots[i].push(a); V.hover = null; renderAnnots(i);
+  startEditText(V.els[i].overlay.querySelector(`.ann-text[data-id="${a.id}"]`), i, [cx, cy], before);
+  // exact colours arrive a moment later; patch them in place so typing isn't interrupted
+  sampleColors(i, cover, seg.fs).then(({ fg, bg }) => {
+    a.color = fg; a.cover.bg = bg;
+    const o = V.els[i].overlay; const t = o.querySelector(`.ann-text[data-id="${a.id}"]`), cv = o.querySelector(`.ann-cover[data-id="${a.id}"]`);
+    if (t) t.style.color = fg; if (cv) cv.style.background = bg;
+    if (V.sel && V.sel.id === a.id) $('#vColor').value = fg;
+  });
+}
+function onEditHover(e, i) {
+  if (V.tool !== 'edit') return;
+  const p = ptIn(e, i);
+  pageSegs(i).then(segs => {
+    if (V.tool !== 'edit') return;
+    const seg = e.target.closest && e.target.closest('.ann') ? null : segAt(segs, p);
+    const prev = V.hover; if ((prev && prev.seg) === seg && (!prev || prev.page === i)) return;
+    V.hover = seg ? { page: i, seg } : null;
+    if (prev && prev.page !== i) renderAnnots(prev.page);
+    renderAnnots(i);
+  });
+}
 $('#vSize').addEventListener('change', e => restyleSel('size', +e.target.value));
 $('#vFont').addEventListener('change', e => restyleSel('font', e.target.value));
 
@@ -1156,7 +1262,8 @@ $('#vSigBtn').onclick = () => {
 async function buildAnnotated() {
   const doc = await openPdfLib(V.bytes);
   const { StandardFonts, degrees, BlendMode, LineCapStyle } = PDFLib;
-  const fonts = {}; const getFont = async n => fonts[n] || (fonts[n] = await doc.embedFont(StandardFonts[n]));
+  const STD = { Helvetica: ['Helvetica', 'HelveticaBold', 'HelveticaOblique', 'HelveticaBoldOblique'], Times: ['TimesRoman', 'TimesRomanBold', 'TimesRomanItalic', 'TimesRomanBoldItalic'], Courier: ['Courier', 'CourierBold', 'CourierOblique', 'CourierBoldOblique'] };
+  const fonts = {}; const getFont = async (n, b, it) => { const k = (STD[n] || STD.Helvetica)[(b ? 1 : 0) + (it ? 2 : 0)]; return fonts[k] || (fonts[k] = await doc.embedFont(StandardFonts[k])); };
   const imgCache = new Map();
   const pages = doc.getPages();
   for (let i = 0; i < V.annots.length; i++) {
@@ -1166,7 +1273,8 @@ async function buildAnnotated() {
     const P = (x, y) => F.map(x, F.VH - y);
     for (const a of list) {
       if (a.type === 'text') {
-        const font = await getFont(a.font);
+        if (a.cover) { const c = a.cover, o = P(c.x, c.y + c.h); page.drawRectangle({ x: o.x, y: o.y, width: c.w, height: c.h, color: hexToRgb(a.cover.bg), rotate: rot }); }
+        const font = await getFont(a.font, a.bold, a.italic);
         const lines = a.text.split('\n');
         lines.forEach((ln, k) => {
           const safe = [...ln].map(ch => { try { font.encodeText(ch); return ch; } catch (e) { return '?'; } }).join('');
@@ -1285,7 +1393,7 @@ document.addEventListener('keydown', e => {
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (e.key === 'Delete' || e.key === 'Backspace') { if (V.sel) { e.preventDefault(); deleteSel(); } return; }
   if (mod || e.altKey) return;
-  const map = { v: 'select', t: 'text', d: 'draw', h: 'highlight', r: 'rect', w: 'whiteout' };
+  const map = { v: 'select', e: 'edit', t: 'text', d: 'draw', h: 'highlight', r: 'rect', w: 'whiteout' };
   if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
   if (e.key === 'PageDown') { e.preventDefault(); gotoPage(currentPage() + 1); }
   if (e.key === 'PageUp') { e.preventDefault(); gotoPage(currentPage() - 1); }
