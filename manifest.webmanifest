@@ -1,7 +1,7 @@
 {
   "name": "PDF Studio",
   "short_name": "PDF Studio",
-  "description": "Offline PDF toolkit: view, edit, sign, merge, split, compress, print, convert to Word & Excel.",
+  "description": "Offline PDF toolkit: view, edit, sign, redact, protect, OCR, merge, split, compress, print, convert to Word & Excel.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -121,7 +121,13 @@
           "type": "image/png"
         }
       ],
-      "launch_type": "multiple-clients"
+      "launch_type": "single-client"
     }
-  ]
+  ],
+  "launch_handler": {
+    "client_mode": [
+      "focus-existing",
+      "auto"
+    ]
+  }
 }
