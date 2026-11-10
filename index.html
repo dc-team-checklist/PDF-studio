@@ -169,6 +169,16 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
 .prsheet{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .prsheet canvas{background:#fff;box-shadow:var(--shadow)}
 @media (max-width:760px){.prgrid{grid-template-columns:1fr}}
+#printArea{display:none}
+@media print{
+  html,body{background:#fff!important;height:auto!important;display:block!important;margin:0!important;padding:0!important;overflow:visible!important}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block!important}
+  .psheet{overflow:hidden;break-after:page;page-break-after:always}
+  .psheet:last-child{break-after:auto;page-break-after:auto}
+  .psheet img{width:100%;height:100%;display:block;object-fit:fill}
+  #printArea:empty::before{content:"To print a PDF in PDF Studio: open it, then click the Print button or press Ctrl+P inside the app.";display:block;font:16px/1.5 Arial,sans-serif;padding:60px 40px;color:#000}
+}
 .formfield{display:grid;grid-template-columns:220px 1fr;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
 .formfield label{overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13px}
 @media (max-width:760px){
@@ -579,8 +589,8 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
         <div id="prPreview" class="prprev"></div>
       </div>
     </div>
-    <p class="hint" style="margin-bottom:0">Printer, number of copies and two-sided printing are chosen in the next window. For exact sizes pick the same paper size there and keep its scale at 100% / “Actual size”.</p>
-    <div class="actions"><button class="btn primary" id="prGo">🖨 Print…</button><button class="btn" id="prSave">⬇ Save as print-ready PDF</button><div style="flex:1"></div><button class="btn" id="prCancel">Cancel</button></div>
+    <p class="hint" style="margin-bottom:0">Click <b>Print…</b> and your browser’s print window opens with your <b>printers</b>, number of copies and two-sided options (web apps aren’t allowed to list printers themselves). There, keep <b>Margins: None/Default</b> and <b>Scale: 100%</b> — the layout above is already applied.</p>
+    <div class="actions"><button class="btn primary" id="prGo">🖨 Print… (choose printer)</button><button class="btn" id="prSave">⬇ Save as print-ready PDF</button><div style="flex:1"></div><button class="btn" id="prCancel">Cancel</button></div>
   </div>
 </div>
 
@@ -622,6 +632,8 @@ svg.ann.sel path{filter:drop-shadow(0 0 2px #2563eb) drop-shadow(0 0 2px #2563eb
   </div>
 </div>
 
+<div id="printArea"></div>
+<style id="printPageCss"></style>
 <div id="busy"><div><span class="spin"></span><span id="busyText">Working…</span></div></div>
 <div id="toast"></div>
 <input type="file" id="hiddenFile" style="display:none">
@@ -1377,12 +1389,14 @@ $('#vSearchGo').onclick = doSearch;
 $('#vSearchQ').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 
 /* keyboard */
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); if (!$('#prModal').classList.contains('show')) showPrint(); }
+}, true);
 document.addEventListener('keydown', e => {
   const inField = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable;
   const viewOn = $('#t-view').classList.contains('show');
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === 'Escape') { $$('.modal-bg').forEach(m => m.classList.remove('show')); }
-  if (mod && e.key.toLowerCase() === 'p') { e.preventDefault(); showPrint(); return; }
   if (!viewOn) return;
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); $('#vSave').click(); return; }
   if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); openViewerPicker(); return; }
@@ -2259,14 +2273,35 @@ function showPrint() {
   $('#prName').textContent = '— ' + V.name; prUi(); $('#prModal').classList.add('show'); $('#prPreview').innerHTML = ''; prPreview();
 }
 window.showPrint = showPrint;
-function printBytes(bytes) {
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  $$('iframe.prframe').forEach(f => f.remove());
-  const fr = el('iframe', { class: 'prframe', style: 'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0', src: url });
-  fr.onload = () => setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(url, '_blank'); toast('Use the Print button in the new tab.'); } }, 400);
-  document.body.append(fr);
+/* Print through the browser's own print window (shows printers, copies, two-sided…).
+   The prepared sheets are placed in #printArea; print CSS hides the rest of the app. */
+let printUrls = [], printClearTimer = null;
+function clearPrintArea() { printUrls.forEach(u => URL.revokeObjectURL(u)); printUrls = []; $('#printArea').innerHTML = ''; $('#printPageCss').textContent = ''; }
+async function preparePrintArea(st) {
+  clearTimeout(printClearTimer); const r = await buildPrint(st); clearTimeout(printClearTimer); clearPrintArea();
+  const pdf = await openPdfJs(r.bytes); const area = $('#printArea'); const names = new Map(); let css = '@page { margin: 0; }\n';
+  const dpi = r.sheets > 80 ? 200 : 300;
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      $('#busyText').textContent = `Preparing sheet ${i} of ${pdf.numPages} for the printer…`;
+      const pg = await pdf.getPage(i); const vp = pg.getViewport({ scale: 1 });
+      const W = Math.round(vp.width * 100) / 100, H = Math.round(vp.height * 100) / 100, key = W + 'x' + H;
+      if (!names.has(key)) { const n = 'ps' + names.size; names.set(key, n); css += `@page ${n} { size: ${W}pt ${H}pt; margin: 0; }\n`; }
+      const c = await renderPageToCanvas(pdf, i, dpi / 72);
+      const url = URL.createObjectURL(await canvasToBlob(c, 'image/jpeg', 0.95)); c.width = c.height = 0; printUrls.push(url);
+      const img = el('img', { src: url, alt: '' }); await img.decode();
+      area.append(el('div', { class: 'psheet', style: `width:${W}pt;height:${H - 0.5}pt;page:${names.get(key)}` }, img));
+    }
+  } finally { pdf.destroy(); }
+  $('#printPageCss').textContent = css;
+  return r;
 }
-$('#prGo').onclick = () => guarded(async () => { const st = prSettings(); const r = await buildPrint(st); $('#prModal').classList.remove('show'); printBytes(r.bytes); }, 'Preparing pages for printing…');
+window.addEventListener('afterprint', () => { clearTimeout(printClearTimer); printClearTimer = setTimeout(clearPrintArea, 1500); });
+$('#prGo').onclick = () => guarded(async () => {
+  const st = prSettings(); await preparePrintArea(st); $('#prModal').classList.remove('show');
+  busy(false); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  window.print();
+}, 'Preparing pages for printing…');
 $('#prSave').onclick = () => guarded(async () => { const r = await buildPrint(prSettings()); download(r.bytes, baseName(V.name) + '-print.pdf'); toast('Print-ready PDF saved.'); }, 'Preparing pages…');
 $('#prCancel').onclick = () => $('#prModal').classList.remove('show');
 $('#vPrint').onclick = () => { if (!V.pdf) return toast('Open a PDF first.', true); showPrint(); };
