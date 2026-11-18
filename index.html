@@ -229,13 +229,17 @@ section#t-view{position:relative}
 /* bookmarks & comments panels */
 .bmrow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px}
 .bmrow:hover{background:var(--panel2)}
+.bmtw{width:16px;flex:none;text-align:center;color:var(--muted);cursor:pointer;font-size:11px;user-select:none}
+.bmtw.none{cursor:default}
+.bmrow.cur{background:var(--accent-soft)}.bmrow.cur .bmt{color:var(--accent);font-weight:600}
+
 .bmrow .bmt{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .bmrow .bmb{padding:1px 5px;display:none}.bmrow:hover .bmb{display:inline-flex}
 .comrow{padding:7px 8px;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer}
 .comrow:hover{border-color:var(--accent)}
 .comtxt{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 
-@media (max-width:1780px){ #vbar .lbl{display:none} }
+@media (max-width:1780px){ #vbar .lbl:not(.keep){display:none} }
 @media (max-width:1680px){ #vtools .lbl{display:none} #vtools .btn.on .lbl{display:inline} }
 .cmpdrops{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .cmpblk h3{display:flex;align-items:baseline;flex-wrap:wrap}
@@ -309,7 +313,7 @@ section#t-view{position:relative}
     <button class="btn sm" id="vPresent" title="Full-screen presentation (F5)">▶<span class="lbl"> Present</span></button>
     <span class="sep"></span>
     <button class="btn sm" id="vThumbBtn" title="Page thumbnails">▦<span class="lbl"> Pages</span></button>
-    <button class="btn sm" id="vBmBtn" title="Bookmarks / table of contents">🔖<span class="lbl"> Bookmarks</span></button>
+    <button class="btn sm" id="vBmBtn" title="Bookmarks / table of contents">📑<span class="lbl keep"> Bookmarks</span></button>
     <button class="btn sm" id="vComBtn" title="Comments & sticky notes">💬<span class="lbl"> Comments</span></button>
     <button class="btn sm" id="vSearchBtn" title="Search text (Ctrl+F)">🔍<span class="lbl"> Search</span></button>
     <button class="btn sm" id="vReadBtn" title="Read the document aloud">🔊<span class="lbl"> Read aloud</span></button>
@@ -1239,8 +1243,8 @@ async function loadDocExtras() {
       }
       return out;
     };
-    setF('outline', await conv(await pdf.getOutline()));
-    if (curTab === tab) renderBookmarks();
+    const ol = await conv(await pdf.getOutline()); setF('outline', ol);
+    if (curTab === tab) { if (ol.length && !$$('.vside').some(x => x.classList.contains('show')) && window.innerWidth > 900) togglePanel('#vBmPanel'); renderBookmarks(); }
   } catch (e) { console.warn('outline', e); }
   for (let i = 0; i < vps.length; i++) {
     try {
@@ -2186,17 +2190,33 @@ async function buildThumbs() {
 /* bookmarks */
 function renderBookmarks() {
   const box = $('#bmList'); if (!box) return; box.innerHTML = '';
-  $('#bmHint').textContent = !V.pdf ? '' : V.outline.length ? 'Click a bookmark to jump to it. Changes are saved when you click Save.' : 'This PDF has no bookmarks yet. Go to a page and click “Bookmark this page”.';
+  $('#bmHint').textContent = !V.pdf ? '' : V.outline.length ? 'Click a bookmark to jump to it. ▸ opens a chapter. Changes are saved when you click Save.' : 'This PDF has no bookmarks yet. Go to a page and click “Bookmark this page”.';
+  const total = (function count(l) { return l.reduce((n, it) => n + 1 + count(it.children || []), 0); })(V.outline || []);
   const draw = (list, depth) => list.forEach((it, k) => {
-    const row = el('div', { class: 'bmrow', style: `padding-left:${6 + depth * 14}px` },
+    const kids = it.children || [];
+    if (it.open === undefined) it.open = depth === 0 && total <= 60;
+    const tw = el('span', { class: 'bmtw' + (kids.length ? '' : ' none'), title: kids.length ? (it.open ? 'Collapse' : 'Expand') : '', onclick: ev => { ev.stopPropagation(); if (!kids.length) return; it.open = !it.open; renderBookmarks(); } }, kids.length ? (it.open ? '▾' : '▸') : '');
+    const row = el('div', { class: 'bmrow', style: `padding-left:${2 + depth * 14}px`, 'data-page': it.page == null ? '' : it.page },
+      tw,
       el('span', { class: 'bmt', title: it.title, onclick: () => { if (it.page != null) gotoPage(it.page); else if (it.url) window.open(it.url, '_blank'); } }, it.title),
       el('span', { class: 'hint' }, it.page != null ? 'p.' + (it.page + 1) : it.url ? 'link' : ''),
       el('button', { class: 'btn sm bmb', title: 'Rename', onclick: () => { const t = prompt('Bookmark title:', it.title); if (t !== null && t.trim()) { it.title = t.trim(); V.bmDirty = true; markDirty(); renderBookmarks(); } } }, '✎'),
       el('button', { class: 'btn sm bmb', title: 'Delete', onclick: () => { list.splice(k, 1); V.bmDirty = true; markDirty(); renderBookmarks(); } }, '🗑'));
-    box.append(row); draw(it.children || [], depth + 1);
+    box.append(row); if (kids.length && it.open) draw(kids, depth + 1);
   });
   draw(V.outline || [], 0);
+  if (total > 8) box.append(el('div', { class: 'row', style: 'gap:6px;margin-top:8px' },
+    el('button', { class: 'btn sm', onclick: () => { (function f(l) { l.forEach(x => { if ((x.children || []).length) { x.open = true; f(x.children); } }); })(V.outline); renderBookmarks(); } }, 'Expand all'),
+    el('button', { class: 'btn sm', onclick: () => { (function f(l) { l.forEach(x => { x.open = false; f(x.children || []); }); })(V.outline); renderBookmarks(); } }, 'Collapse all')));
+  markCurrentBookmark();
 }
+function markCurrentBookmark() {
+  if (!$('#vBmPanel').classList.contains('show') || !V.pdf) return;
+  const cp = currentPage(); let best = null;
+  for (const r of $$('#bmList .bmrow')) { const pg = r.dataset.page === '' ? NaN : +r.dataset.page; if (pg <= cp && (!best || pg >= +best.dataset.page)) best = r; }
+  $$('#bmList .bmrow.cur').forEach(r => r.classList.remove('cur')); if (best) best.classList.add('cur');
+}
+$('#vPages').addEventListener('scroll', () => { clearTimeout(window.__bmT); window.__bmT = setTimeout(markCurrentBookmark, 120); });
 $('#bmAdd').onclick = () => {
   if (!V.pdf) return toast('Open a PDF first.', true);
   const pg = currentPage(); const t = prompt('Bookmark title:', 'Page ' + (pg + 1)); if (t === null || !t.trim()) return;
